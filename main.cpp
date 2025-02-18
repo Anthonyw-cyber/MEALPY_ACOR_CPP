@@ -58,22 +58,13 @@ private:
     vector<Ant> pop;
     function<double(const VectorXd&)> objective_function;
     mt19937 gen;
-    ofstream results_file;
-    string function_name;
 
 public:
     OriginalACOR(int epoch, int pop_size, double intent_factor, double zeta, int sample_count,
-                 double lb, double ub, int dimension, function<double(const VectorXd&)> obj_func, const string& func_name)
+                 double lb, double ub, int dimension, function<double(const VectorXd&)> obj_func)
             : epoch(epoch), pop_size(pop_size), sample_count(sample_count),
               intent_factor(intent_factor), zeta(zeta), lb(lb), ub(ub),
-              dimension(dimension), objective_function(obj_func), gen(42), function_name(func_name) {
-        results_file.open("fitness_results_" + function_name + ".csv", ios::out);
-        results_file << "Epoch,Best Fitness" << endl;
-    }
-
-    ~OriginalACOR() {
-        results_file.close();
-    }
+              dimension(dimension), objective_function(obj_func), gen(rd()) {}
 
     void initialize_variables() {
         pop.clear();
@@ -119,37 +110,35 @@ public:
         initialize_variables();
         for (int i = 0; i < epoch; ++i) {
             evolve();
-            if ((i + 1) % 5000 == 0) {
-                results_file << i + 1 << "," << pop[0].target << endl;
-            }
-            cout << "Epoch " << i + 1 << ": Best Fitness = " << pop[0].target << endl;
         }
         return pop[0].target;
     }
 };
 
 int main() {
-   vector<int> dimensions = {30,50,100};
+    vector<int> dimensions = {30, 50, 100};
     int epoch = 5000, pop_size = 30, sample_count = 50;
     double intent_factor = 0.5, zeta = 0.85, lb = -10.0, ub = 10.0;
     vector<pair<function<double(const VectorXd&)>, string>> functions = {
-            {rosenbrock_function, "Rosenbrock"},
-            {ackley_function, "Ackley"},
-            {rastrigin_function, "Rastrigin"}
+            {rosenbrock_function, "rosenbrock_function"},
+            {ackley_function, "ackley_func"},
+            {rastrigin_function, "rastrigin_func"}
     };
     int run = 10;
 
-for (int i =0 ; i < run;i++) {
-    for(int dimension: dimensions) {
-        for (const auto &func: functions) {
-            cout << "Running " << func.second << " function..." << endl;
-            OriginalACOR acor(epoch, pop_size, intent_factor, zeta, sample_count, lb, ub, dimension, func.first,
-                              func.second);
-            double best_fitness = acor.solve();
-            cout << "Best fitness for " << func.second << ": " << best_fitness << endl;
+    for (int dimension : dimensions) {
+        for (const auto &func : functions) {
+            string filename = func.second + "-" + to_string(dimension) + "dim-" + to_string(pop_size) + "popsize.txt";
+            ofstream results_file(filename, ios::out);
+
+            for (int i = 0; i < run; i++) {
+                OriginalACOR acor(epoch, pop_size, intent_factor, zeta, sample_count, lb, ub, dimension, func.first);
+                double best_fitness = acor.solve();
+                results_file << best_fitness << endl;
+                cout << "Best fitness for " << func.second << " (dim " << dimension << ") run " << i+1 << ": " << best_fitness << endl;
+            }
+            results_file.close();
         }
     }
-}
-
     return 0;
 }
