@@ -34,20 +34,20 @@ double rosenbrock_function(const VectorXd& solution) {
     return sum;
 }
 
-struct Ant {
+struct Agent {
     VectorXd solution;
-    double target;
+    double fitness;
 
-    Ant() = default;
+    Agent() = default;
 
-    Ant(int dimension, double lb, double ub, mt19937& gen) {
+    Agent(int dimension, double lb, double ub, mt19937& gen) {
         uniform_real_distribution<double> dis(lb, ub);
         solution = VectorXd::NullaryExpr(dimension, [&]() { return dis(gen); });
-        target = 0.0;
+        fitness = 0.0;
     }
 
-    Ant(const VectorXd& pos, function<double(const VectorXd&)> obj_func) : solution(pos) {
-        target = obj_func(solution);
+    Agent(const VectorXd& pos, function<double(const VectorXd&)> obj_func) : solution(pos) {
+        fitness = obj_func(solution);
     }
 };
 
@@ -70,13 +70,24 @@ public:
         }
         return probabilities.size() - 1;
     }
+
+    void update_target_for_population(vector<Agent>& pop_new, function<double(const VectorXd&)> objective_func) {
+        for (auto& agent : pop_new) {
+            agent.fitness = objective_func(agent.solution);
+        }
+    }
+
+    void get_sorted_and_trimmed_population(vector<Agent>& pop, int pop_size) {
+        sort(pop.begin(), pop.end(), [](const Agent& a, const Agent& b) { return a.fitness < b.fitness; });
+        pop.resize(pop_size);
+    }
 };
 
 class OriginalACOR : public Optimizer {
 private:
     int epoch, pop_size, sample_count, dimension;
     double intent_factor, zeta, lb, ub;
-    vector<Ant> pop;
+    vector<Agent> pop;
     function<double(const VectorXd&)> objective_function;
 
 public:
@@ -90,7 +101,7 @@ public:
         pop.clear();
         for (int i = 0; i < pop_size; ++i) {
             pop.emplace_back(dimension, lb, ub, gen);
-            pop[i].target = objective_function(pop[i].solution);
+            pop[i].fitness = objective_function(pop[i].solution);
         }
     }
 
@@ -110,7 +121,7 @@ public:
         }
 
         normal_distribution<double> normal_dist(0.0, 1.0);
-        vector<Ant> pop_new;
+        vector<Agent> pop_new;
         for (int i = 0; i < sample_count; ++i) {
             VectorXd child = VectorXd::Zero(dimension);
             for (int j = 0; j < dimension; j++) {
@@ -121,9 +132,9 @@ public:
             pop_new.emplace_back(child, objective_function);
         }
 
+        update_target_for_population(pop_new, objective_function);
         pop.insert(pop.end(), pop_new.begin(), pop_new.end());
-        sort(pop.begin(), pop.end(), [](const Ant& a, const Ant& b) { return a.target < b.target; });
-        pop.resize(pop_size);
+        get_sorted_and_trimmed_population(pop, pop_size);
     }
 
     double solve() {
@@ -131,7 +142,7 @@ public:
         for (int i = 0; i < epoch; ++i) {
             evolve();
         }
-        return pop[0].target;
+        return pop[0].fitness;
     }
 };
 
