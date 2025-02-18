@@ -116,7 +116,12 @@ public:
 
         MatrixXd matrix_sigma(dimension, pop_size);
         for (int i = 0; i < pop_size; ++i) {
-            VectorXd D = (matrix_pos.colwise() - pop[i].solution).cwiseAbs().rowwise().sum();
+            MatrixXd matrix_i(dimension, pop_size);
+            for (int j = 0; j < pop_size; ++j) {
+                matrix_i.col(j) = pop[i].solution;  // Répète la solution de l'agent i
+            }
+
+            VectorXd D = (matrix_pos - matrix_i).cwiseAbs().rowwise().sum();
             matrix_sigma.col(i) = zeta * D / (pop_size - 1);
         }
 
@@ -168,9 +173,10 @@ int main() {
                 double best_fitness = acor.solve();
                 results_file << best_fitness << endl;
                 cout << "Best fitness for " << func.second << " (dim " << dimension << ") run " << i+1 << ": " << best_fitness << endl;
-            }
+
             results_file.close();
         }
+    }
     }
     return 0;
 }
