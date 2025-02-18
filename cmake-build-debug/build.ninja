@@ -52,6 +52,7 @@ build cmake_object_order_depends_target_DPF: phony || .
 build CMakeFiles/DPF.dir/main.cpp.obj: CXX_COMPILER__DPF_unscanned_Debug C$:/Users/awilhelm/CLionProjects/DPF/main.cpp || cmake_object_order_depends_target_DPF
   DEP_FILE = CMakeFiles\DPF.dir\main.cpp.obj.d
   FLAGS = -g -std=gnu++20 -fdiagnostics-color=always
+  INCLUDES = -IC:/eigen
   OBJECT_DIR = CMakeFiles\DPF.dir
   OBJECT_FILE_DIR = CMakeFiles\DPF.dir
 
