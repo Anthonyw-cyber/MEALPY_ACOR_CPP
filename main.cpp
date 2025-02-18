@@ -51,20 +51,40 @@ struct Ant {
     }
 };
 
-class OriginalACOR {
+class Optimizer {
+protected:
+    mt19937 gen;
+
+public:
+    Optimizer() : gen(random_device{}()) {}
+
+    int get_index_roulette_wheel_selection(const VectorXd& probabilities) {
+        uniform_real_distribution<double> dis(0.0, 1.0);
+        double r = dis(gen);
+        double cumulative_sum = 0.0;
+        for (int i = 0; i < probabilities.size(); ++i) {
+            cumulative_sum += probabilities[i];
+            if (r <= cumulative_sum) {
+                return i;
+            }
+        }
+        return probabilities.size() - 1;
+    }
+};
+
+class OriginalACOR : public Optimizer {
 private:
     int epoch, pop_size, sample_count, dimension;
     double intent_factor, zeta, lb, ub;
     vector<Ant> pop;
     function<double(const VectorXd&)> objective_function;
-    mt19937 gen;
 
 public:
     OriginalACOR(int epoch, int pop_size, double intent_factor, double zeta, int sample_count,
                  double lb, double ub, int dimension, function<double(const VectorXd&)> obj_func)
             : epoch(epoch), pop_size(pop_size), sample_count(sample_count),
               intent_factor(intent_factor), zeta(zeta), lb(lb), ub(ub),
-              dimension(dimension), objective_function(obj_func), gen(rd()) {}
+              dimension(dimension), objective_function(obj_func) {}
 
     void initialize_variables() {
         pop.clear();
@@ -94,7 +114,7 @@ public:
         for (int i = 0; i < sample_count; ++i) {
             VectorXd child = VectorXd::Zero(dimension);
             for (int j = 0; j < dimension; j++) {
-                int rdx = discrete_distribution<int>(matrix_p.data(), matrix_p.data() + pop_size)(gen);
+                int rdx = get_index_roulette_wheel_selection(matrix_p);
                 child[j] = pop[rdx].solution[j] + normal_dist(gen) * matrix_sigma(j, rdx);
             }
             child = child.cwiseMax(lb).cwiseMin(ub);
@@ -115,6 +135,7 @@ public:
     }
 };
 
+
 int main() {
     vector<int> dimensions = {30, 50, 100};
     int epoch = 5000, pop_size = 30, sample_count = 50;
@@ -124,7 +145,7 @@ int main() {
             {ackley_function, "ackley_func"},
             {rastrigin_function, "rastrigin_func"}
     };
-    int run = 10;
+    int run = 1;
 
     for (int dimension : dimensions) {
         for (const auto &func : functions) {
