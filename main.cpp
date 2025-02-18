@@ -7,6 +7,7 @@
 #include <fstream>
 #include <numeric>
 #include <random>
+#include <functional>
 
 
 using namespace std;
@@ -79,9 +80,13 @@ int get_index_roulette_wheel_selection(const vector<double>& probabilities) {
     return probabilities.size() - 1;  // Retourne le dernier index par défaut (sécurité)
 }
 std::vector<double> generate_random_solution(double lb, double ub, int dim) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(lb, ub);
+
     std::vector<double> sol(dim);
     for (int i = 0; i < dim; ++i) {
-        sol[i] = lb + ((double) rand() / RAND_MAX) * (ub - lb);
+        sol[i] = dis(gen);  // Génére un vrai aléatoire entre lb et ub
     }
     return sol;
 }
@@ -96,7 +101,7 @@ struct Ant {
         uniform_real_distribution<double> dis(lb, ub);
 
         solution.resize(dimension);
-            solution = generate_random_solution(lb,ub,dimension);  // Initialisation aléatoire dans l'intervalle [lb, ub]
+        solution = generate_random_solution(lb,ub,dimension);  // Initialisation aléatoire dans l'intervalle [lb, ub]
 
     }
     Ant(const vector<double>& pos, double (*objective_func)(const vector<double>&)) {
@@ -110,7 +115,7 @@ struct Ant {
 
 };
 double objective_function(const vector<double>& solution) {
-    return ackley_function(solution);
+    return rosenbrock_function(solution);
 }
 vector<Ant> get_sorted_population(vector<Ant>& pop, string minmax, bool return_index = false, vector<int>* indices = nullptr) {
     // Créer un vecteur d'indices pour suivre le tri
@@ -183,12 +188,11 @@ private:
     int dimension;
     double dyn_alpha;
 
-    double (*objective_function)(const vector<double> &);
-
+function<double(const vector<double>&)> objective_function;
 
 public:
     OriginalACOR(int epoch, int pop_size, double intent_factor, double zeta, int sample_count, double lb, double ub,
-                 int dimension, double (*obj_func)(const vector<double> &))
+                 int dimension, function<double(const vector<double>&)> obj_func)
             : Optimizer(epoch, pop_size, intent_factor, zeta, sample_count), lb(lb), ub(ub), dimension(dimension),
               objective_function(obj_func) {}
 
@@ -212,7 +216,7 @@ public:
         vector<double> matrix_w;
         for (int i = 0; i < pop_rank.size(); ++i) {
             matrix_w.push_back((1.0 / (sqrt(2.0 * M_PI) * qn)) *
-                               exp(pow(-0.5 * ((static_cast<double>(pop_rank[i]) - 1) / qn), 2)));
+                               exp(-0.5 * pow(((static_cast<double>(pop_rank[i]) - 1) / qn), 2)));
         }
 
         vector<double> matrix_p;
@@ -237,8 +241,12 @@ public:
             }
             vector<double> D = compute_absolute_sum(matrix_pos, matrix_i);
             vector<double> temp;
+            double mean_D = accumulate(D.begin(), D.end(), 0.0) / D.size();
+
             for (double d : D) {
-                temp.push_back(zeta * d / (pop_size - 1));
+                double sigma = zeta * d / max(1.0, static_cast<double>(pop_size - 1));
+                sigma = max(sigma, mean_D * 0.05);  // Borne minimale pour éviter un sigma trop faible
+                temp.push_back(sigma);
             }
             matrix_sigma.push_back(temp);
         }
@@ -246,13 +254,16 @@ public:
         // Generate Samples
         random_device rd;
         mt19937 gen(rd());
-        normal_distribution<double> dist(0.0, 1.0);
+        normal_distribution<double> normal_dist(0.0, 1.0);
+
         vector<Ant> pop_new;
         for (int i = 0; i < sample_count; ++i) {
             vector<double> child(dimension, 0.0);
             for (int j = 0; j < dimension; j++) {
+
                 int rdx = get_index_roulette_wheel_selection(matrix_p);
-                child[j] = pop[rdx].solution[j] + matrix_sigma[rdx][j] * dist(gen); //equation 1
+
+                child[j] = pop[rdx].solution[j] + normal_dist(gen) * matrix_sigma[rdx][j];
             }
             vector<double> pos_new = correct_solution(child, lb, ub);   //equation 2
             Ant agent = generate_empty_agent(pos_new);
@@ -264,28 +275,28 @@ public:
         combined_pop.insert(combined_pop.end(), pop_new.begin(), pop_new.end());
 
         pop = get_sorted_and_trimmed_population(combined_pop, pop_size, "min");  // Sélection des meilleurs
-        };
+    };
 
     double solve() {
         initialize_variables();
         // Initialisation de la population
-            for (int i = 0; i < epoch; ++i) {
-                evolve();
-                if (pop.empty()) {  // Vérification de la population
-                    cerr << "Erreur: Population vide après evolution !" << endl;
-                    return std::numeric_limits<double>::max();  // Retourne une valeur très haute pour signaler une erreur
-                }
-                cout << "Epoch " << i + 1 << ": Best Fitness = " << pop[0].target << endl;
+        for (int i = 0; i < epoch; ++i) {
+            evolve();
+            if (pop.empty()) {  // Vérification de la population
+                cerr << "Erreur: Population vide après evolution !" << endl;
+                return std::numeric_limits<double>::max();  // Retourne une valeur très haute pour signaler une erreur
             }
-            return pop[0].target;
+            cout << "Epoch " << i + 1 << ": Best Fitness = " << pop[0].target << endl;
         }
+        return pop[0].target;
+    }
 
 
-    };
+};
 
 void save_results_to_csv(const std::string &function_name, int dimension, double result) {
 
-    std::ofstream file("bench/results" + to_string(dimension) + function_name + ".csv", std::ios::app);
+    std::ofstream file("benchs/results" + to_string(dimension) + function_name + ".csv", std::ios::app);
     if (file.is_open()) {
         file << function_name << "," << dimension << "," << result << "\n";
         file.close();
@@ -293,29 +304,38 @@ void save_results_to_csv(const std::string &function_name, int dimension, double
         std::cerr << "Erreur lors de l'ouverture du fichier CSV." << std::endl;
     }
 }
+struct NamedFunction {
+    std::function<double(const std::vector<double>&)> function;
+    std::string name;
+
+};
 
 int main() {
 
     // Paramètres de l'algorithme
-    int epoch = 5000;
+    int epoch = 2000;
     int pop_size = 30;
     double intent_factor = 0.5;
     double zeta = 0.85;
     int sample_count = 50;
     double lb = -10.0;
     double ub = 10.0;
+    vector<NamedFunction> objective_functions = {{rosenbrock_function,"rosenbroke"}, {ackley_function,"ackley"},
+                                                 {rastrigin_function,"rastrigin"}};
 
-    vector<int> dimensions = {30};
+    vector<int> dimensions = {30,50,100};
+    for(const auto& function : objective_functions) {
+        for (int i = 0; i < 10; i++) {
 
-    for(int i = 0; i < 10; i++) {
-        cout << "Dimension: " << dimensions[i] << endl;
+            cout << "Dimension: " << dimensions[i] << endl;
 
-        for (int dimension: dimensions) {
-            OriginalACOR acor(epoch, pop_size, intent_factor, zeta, sample_count, lb, ub, dimension,
-                              objective_function);
-            double best_fitness = acor.solve();
-            cout << "Dimension: " << dimension << "\tFitness: " << best_fitness << endl;
-            save_results_to_csv("rastrigin", dimension, best_fitness);
+            for (int dimension: dimensions) {
+                OriginalACOR acor(epoch, pop_size, intent_factor, zeta, sample_count, lb, ub, dimension,
+                                  function.function);
+                double best_fitness = acor.solve();
+                cout << "Dimension: " << dimension << "\tFitness: " << best_fitness << endl;
+                save_results_to_csv(function.name, dimension, best_fitness);
+            }
         }
     }
 
