@@ -313,7 +313,7 @@ struct NamedFunction {
 int main() {
 
     // Paramètres de l'algorithme
-    int epoch = 2000;
+    int epoch = 5000;
     int pop_size = 30;
     double intent_factor = 0.5;
     double zeta = 0.85;
