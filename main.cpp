@@ -77,7 +77,9 @@ public:
         }
     }
 
-    void get_sorted_and_trimmed_population(vector<Agent>& pop, int pop_size) {
+    void get_sorted_and_trimmed_population(vector<Agent>& pop,vector<Agent>pop_new, int pop_size) {
+        pop.insert(pop.end(), pop_new.begin(), pop_new.end());
+
         sort(pop.begin(), pop.end(), [](const Agent& a, const Agent& b) { return a.fitness < b.fitness; });
         pop.resize(pop_size);
     }
@@ -114,7 +116,7 @@ public:
         MatrixXd matrix_pos(dimension, pop_size);
         for (int i = 0; i < pop_size; ++i) matrix_pos.col(i) = pop[i].solution;
 
-        MatrixXd matrix_sigma(dimension, pop_size);
+        MatrixXd matrix_sigma(pop_size, dimension); // Inversion des dimensions
         for (int i = 0; i < pop_size; ++i) {
             MatrixXd matrix_i(dimension, pop_size);
             for (int j = 0; j < pop_size; ++j) {
@@ -122,7 +124,7 @@ public:
             }
 
             VectorXd D = (matrix_pos - matrix_i).cwiseAbs().rowwise().sum();
-            matrix_sigma.col(i) = zeta * D / (pop_size - 1);
+            matrix_sigma.row(i) = (zeta * D / (pop_size - 1)).transpose(); // Inversion des dimensions
         }
 
         normal_distribution<double> normal_dist(0.0, 1.0);
@@ -131,19 +133,19 @@ public:
             VectorXd child = VectorXd::Zero(dimension);
             for (int j = 0; j < dimension; j++) {
                 int rdx = get_index_roulette_wheel_selection(matrix_p);
-                child[j] = pop[rdx].solution[j] + normal_dist(gen) * matrix_sigma(j, rdx);
+                child[j] = pop[rdx].solution[j] + normal_dist(gen) * matrix_sigma(rdx, j); // Correction de l'indexation
             }
             child = child.cwiseMax(lb).cwiseMin(ub);
             pop_new.emplace_back(child, objective_function);
         }
 
         update_target_for_population(pop_new, objective_function);
-        pop.insert(pop.end(), pop_new.begin(), pop_new.end());
-        get_sorted_and_trimmed_population(pop, pop_size);
+        get_sorted_and_trimmed_population(pop,pop_new, pop_size);
     }
 
     double solve() {
         initialize_variables();
+
         for (int i = 0; i < epoch; ++i) {
             evolve();
         }
@@ -161,14 +163,16 @@ int main() {
             {ackley_function, "ackley_func"},
             {rastrigin_function, "rastrigin_func"}
     };
-    int run = 1;
 
     for (int dimension : dimensions) {
+
         for (const auto &func : functions) {
             string filename = func.second + "-" + to_string(dimension) + "dim-" + to_string(pop_size) + "popsize.txt";
-            ofstream results_file(filename, ios::out);
-
+            int run = 10;
             for (int i = 0; i < run; i++) {
+                ofstream results_file(filename, ios::app);
+
+
                 OriginalACOR acor(epoch, pop_size, intent_factor, zeta, sample_count, lb, ub, dimension, func.first);
                 double best_fitness = acor.solve();
                 results_file << best_fitness << endl;
