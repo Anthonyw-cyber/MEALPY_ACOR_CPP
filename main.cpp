@@ -6,10 +6,12 @@
 #include <cmath>
 #include <algorithm>
 #include <random>
+#include "chrono"
 #include <functional>
 
 using namespace std;
 using namespace Eigen;
+using namespace chrono;
 
 // Ackley function
 double ackley_function(const VectorXd& solution) {
@@ -155,6 +157,8 @@ public:
 
 
 int main() {
+    using namespace std::chrono;
+
     vector<int> dimensions = {30, 50, 100};
     int epoch = 5000, pop_size = 30, sample_count = 50;
     double intent_factor = 0.5, zeta = 0.85, lb = -10.0, ub = 10.0;
@@ -164,23 +168,28 @@ int main() {
             {rastrigin_function, "rastrigin_func"}
     };
 
-    for (int dimension : dimensions) {
+    auto start = high_resolution_clock::now(); // Début du chronométrage
 
+    for (int dimension : dimensions) {
         for (const auto &func : functions) {
             string filename = func.second + "-" + to_string(dimension) + "dim-" + to_string(pop_size) + "popsize.txt";
             int run = 10;
             for (int i = 0; i < run; i++) {
                 ofstream results_file(filename, ios::app);
-
-
                 OriginalACOR acor(epoch, pop_size, intent_factor, zeta, sample_count, lb, ub, dimension, func.first);
                 double best_fitness = acor.solve();
                 results_file << best_fitness << endl;
                 cout << "Best fitness for " << func.second << " (dim " << dimension << ") run " << i+1 << ": " << best_fitness << endl;
-
-            results_file.close();
+                results_file.close();
+            }
         }
     }
-    }
+
+    auto stop = high_resolution_clock::now(); // Fin du chronométrage
+    auto duration = duration_cast<milliseconds>(stop - start);
+
+    cout << "Durée totale d'exécution : " << duration.count() << " ms" << endl;
+
     return 0;
 }
+
